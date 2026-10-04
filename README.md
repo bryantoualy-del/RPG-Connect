@@ -4,12 +4,13 @@ Source centrale des assets et conventions RPG Connect pour les compagnons de la 
 
 ## Pack d'icônes
 
-Le registre couvre **123 icônes** :
+Le registre couvre **138 icônes** :
 - 43 interface
 - 31 inventaire
 - 13 classes
 - 8 écoles de magie
 - 14 types de créatures + 14 variantes boss
+- 15 états D&D
 
 ### Décision sémantique
 Les icônes **épée** et **bouclier** du dossier interface d'origine sont classées ici dans **inventaire** :
@@ -28,6 +29,7 @@ RPG_ICONS.classIcon('paladin');
 RPG_ICONS.magicSchool('evocation');
 RPG_ICONS.inventory('generic_sword');
 RPG_ICONS.ui('d20');
+RPG_ICONS.condition('Étourdi');
 ```
 
 Le fichier `manifest.json` documente toutes les clés disponibles.
