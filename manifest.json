@@ -1,6 +1,9 @@
 {
-  "version": 1,
-  "source": "pack_icones_dnd5e_complet.zip",
+  "version": 2,
+  "source": [
+    "pack_icones_dnd5e_complet.zip",
+    "Etats.zip"
+  ],
   "counts": {
     "ui": 43,
     "classes": 13,
@@ -8,11 +11,13 @@
     "creatureTypes": 14,
     "creatureFiles": 28,
     "inventory": 31,
-    "total": 123
+    "total": 138,
+    "conditions": 15
   },
   "semantics": {
     "inventory/generic_sword": "Original interface/epee — reclassified as inventory.",
-    "inventory/generic_shield": "Original interface/bouclier — reclassified as inventory."
+    "inventory/generic_shield": "Original interface/bouclier — reclassified as inventory.",
+    "conditions/*": "Canonical D&D condition icons from Etats.zip; French labels are normalized accent-insensitively."
   },
   "classes": [
     "artificer",
@@ -132,5 +137,22 @@
     "sauvegarde",
     "spotlight",
     "torche"
+  ],
+  "conditions": [
+    "aveugle",
+    "charme",
+    "assourdi",
+    "effraye",
+    "empoisonne",
+    "entrave",
+    "etourdi",
+    "inconscient",
+    "invisible",
+    "paralyse",
+    "petrifie",
+    "a_terre",
+    "agrippe",
+    "incapacite",
+    "epuisement"
   ]
 }
