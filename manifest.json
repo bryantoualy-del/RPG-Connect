@@ -1,9 +1,6 @@
 {
   "version": 2,
-  "source": [
-    "pack_icones_dnd5e_complet.zip",
-    "Etats.zip"
-  ],
+  "source": "pack_icones_dnd5e_complet.zip",
   "counts": {
     "ui": 43,
     "classes": 13,
@@ -154,5 +151,10 @@
     "agrippe",
     "incapacite",
     "epuisement"
-  ]
+  ],
+  "sources": [
+    "pack_icones_dnd5e_complet.zip",
+    "Etats.zip"
+  ],
+  "conditionSource": "Etats.zip"
 }
