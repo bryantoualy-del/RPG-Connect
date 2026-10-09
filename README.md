@@ -33,3 +33,8 @@ RPG_ICONS.condition('Étourdi');
 ```
 
 Le fichier `manifest.json` documente toutes les clés disponibles.
+
+
+## Rufus
+
+Voir [RUFUS-PROTOCOL.md](RUFUS-PROTOCOL.md) : effets structurés, révisions de jets sur le même identifiant et informations contrôlées par Encounter. Le transport générique existant suffit ; aucun canal ni PV ennemi supplémentaire.
