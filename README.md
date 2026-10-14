@@ -1,6 +1,23 @@
 # RPG Connect
 
-Source centrale des assets et conventions RPG Connect pour les compagnons de la **Compagnie Créole**.
+Serveur WebSocket autonome, assets et conventions RPG Connect pour la **Compagnie Créole**.
+
+## Serveur autonome
+
+Le serveur canonique est `rpg-connect-server.js` à la racine de ce dépôt. Il est extrait sans changement fonctionnel d’Encounter (commit `89cd0213bcca1d58d6c4738a75db8157edfae1a4`, version `hybrid-2026-10-11-lot2`). Encounter conserve l’autorité de combat ; ce serveur assure le transport.
+
+- Installation : `npm ci`
+- Tests : `npm test`
+- Démarrage : `npm start`
+- Santé : `GET /health`
+- Render : Docker, branche `main`, contexte `.`, Dockerfile `./Dockerfile`, région Frankfurt.
+- `RPG_CONNECT_GM_KEY` : secret aléatoire de 24 caractères minimum, configuré sur Render uniquement.
+- `RPG_CONNECT_ORIGINS` : origines clientes autorisées, séparées par des virgules.
+- `PORT` : fourni par Render.
+
+Une nouvelle instance a ses propres salles, invitations et clé MJ. Les salles et files restent en mémoire et disparaissent au redémarrage. Les changements d’Encounter ne doivent plus déployer ce service.
+
+Les assets existants conservent leurs chemins. Le conteneur ne copie que le serveur et ses dépendances.
 
 ## Pack d'icônes
 

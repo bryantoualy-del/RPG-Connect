@@ -1,0 +1,16 @@
+{
+  "name": "compagnie-creole-rpg-connect",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node rpg-connect-server.js",
+    "test": "node --test rpg-connect-protocol.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
