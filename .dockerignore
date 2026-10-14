@@ -3,3 +3,4 @@
 !package.json
 !package-lock.json
 !rpg-connect-server.js
+!rpg-activity-protocol.js

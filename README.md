@@ -4,7 +4,7 @@ Serveur WebSocket autonome, assets et conventions RPG Connect pour la **Compagni
 
 ## Serveur autonome
 
-Le serveur canonique est `rpg-connect-server.js` à la racine de ce dépôt. Il est extrait sans changement fonctionnel d’Encounter (commit `89cd0213bcca1d58d6c4738a75db8157edfae1a4`, version `hybrid-2026-10-11-lot2`). Encounter conserve l’autorité de combat ; ce serveur assure le transport.
+Le serveur canonique est `rpg-connect-server.js` à la racine de ce dépôt. Il est extrait sans changement fonctionnel de la copie serveur Lot 3 dans `Encounter/audit/fixtures/lot3-server/` (commit `89cd0213bcca1d58d6c4738a75db8157edfae1a4`, version `collective-2026-10-12-lot3`). Encounter conserve l’autorité de combat ; ce serveur assure le transport.
 
 - Installation : `npm ci`
 - Tests : `npm test`

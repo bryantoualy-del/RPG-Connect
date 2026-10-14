@@ -1,9 +1,10 @@
 import {createServer} from 'node:http';
 import {randomBytes, timingSafeEqual} from 'node:crypto';
 import {WebSocketServer, WebSocket} from 'ws';
+import {appendActivity} from './rpg-activity-protocol.js';
 
-const protocol={protocolVersion:1,serverVersion:'hybrid-2026-10-11-lot2',capabilities:['manual-corrections-v4','hybrid-resolution-v4','scoped-undo-v1','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1']};
-const coreCapabilities=protocol.capabilities.filter(c=>!['manual-corrections-v4','scoped-undo-v1','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1'].includes(c));
+const protocol={protocolVersion:1,serverVersion:'collective-2026-10-12-lot3',capabilities:['collective-activity-v4','manual-corrections-v4','hybrid-resolution-v4','scoped-undo-v1','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1']};
+const coreCapabilities=protocol.capabilities.filter(c=>!['collective-activity-v4','manual-corrections-v4','scoped-undo-v1','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1'].includes(c));
 const characters=new Set(['kentaro','samoth','brackmard','rufus','nans','zephyr']);
 const key=process.env.RPG_CONNECT_GM_KEY;
 if(!key||key.length<24)throw Error('RPG_CONNECT_GM_KEY doit contenir au moins 24 caractères aléatoires.');
@@ -28,21 +29,25 @@ wss.on('connection',ws=>{
       if(m.role==='gm'){
         if(!equal(m.key,key))throw Error('Clé MJ invalide');
         const requested=String(m.room||'').trim();const roomId=requested&&/^[A-Z0-9_-]{6,32}$/i.test(requested)?requested:random(8);room=rooms.get(roomId);
-        if(!room){room={id:roomId,gm:null,players:new Map(),tokens:new Map(),states:new Map(),seen:new Set(),pending:new Map(),pendingEvents:new Map(),resolution:new Map()};rooms.set(roomId,room)}
-        if(room.gm&&room.gm!==ws)room.gm.close(4001,'Autre session MJ');room.gm=ws;role='gm';send(ws,{type:'welcome',...protocol,room:room.id,role:'gm',payload:{players:peers(room)}});for(const event of room.pendingEvents.values())send(ws,{type:'event',room:room.id,characterId:event.characterId,event});notify(room);return;
+        if(!room){room={activityEpoch:random(12),eventOrder:0,activity:[],activityIds:new Map(),id:roomId,gm:null,players:new Map(),tokens:new Map(),states:new Map(),seen:new Set(),pending:new Map(),pendingEvents:new Map(),resolution:new Map()};rooms.set(roomId,room)}
+        if(room.gm&&room.gm!==ws)room.gm.close(4001,'Autre session MJ');room.gm=ws;role='gm';send(ws,{type:'welcome',...protocol,room:room.id,role:'gm',payload:{players:peers(room)}});for(const event of room.pendingEvents.values())send(ws,{type:'event',room:room.id,characterId:event.characterId,event});send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.activity}});notify(room);return;
       }
       if(m.role==='player'){
         const r=rooms.get(String(m.room||'')),id=String(m.characterId||'').toLowerCase();if(!r||!characters.has(id)||!equal(m.token,r.tokens.get(id)))throw Error('Invitation invalide');
-        room=r;role='player';characterId=id;const old=room.players.get(id);if(old&&old!==ws)old.close(4001,'Nouvelle connexion');room.players.set(id,ws);send(ws,{type:'welcome',...protocol,room:room.id,role:'player',characterId:id});for(const [commandId,cmd] of room.pending)if(cmd.characterId===id)send(ws,cmd);notify(room);return;
+        room=r;role='player';characterId=id;const old=room.players.get(id);if(old&&old!==ws)old.close(4001,'Nouvelle connexion');room.players.set(id,ws);send(ws,{type:'welcome',...protocol,room:room.id,role:'player',characterId:id});for(const [commandId,cmd] of room.pending)if(cmd.characterId===id)send(ws,cmd);send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.activity}});notify(room);return;
       }
       throw Error('Rôle invalide');
+    }
+    if(m.type==='activity-publish'&&role==='gm'){
+      const {entry,fresh}=appendActivity(room,m.payload);if(fresh){send(room.gm,{type:'activity',room:room.id,payload:entry});for(const peer of room.players.values())send(peer,{type:'activity',room:room.id,payload:entry});}
+      send(ws,{type:'activity-ack',id:entry.id,payload:entry});return;
     }
     if(m.type==='event-ack'&&role==='gm'){room.pendingEvents.delete(String(m.id||''));return}
     if(m.type==='invite'&&role==='gm'){const id=String(m.characterId||'').toLowerCase();if(!characters.has(id))throw Error('Personnage inconnu');const token=room.tokens.get(id)||random(24);room.tokens.set(id,token);send(ws,{type:'invite',room:room.id,characterId:id,payload:{token}});return}
     if(m.type==='event'&&role==='player'){
       const e=m.event;if(!e||typeof e.id!=='string'||e.id.length>120||typeof e.type!=='string'||e.characterId!==characterId)throw Error('Événement invalide');
       const policy=room.resolution.get(characterId);if(e.type==='resolution:mode'){const q=e.payload||{};if(!['free','encounter'].includes(q.mode)||!Number.isSafeInteger(q.generation))throw Error('Mode invalide');if(q.generation<(policy?.generation||0)){send(ws,{type:'ack',id:e.id,result:'ignored-resolution-generation'});return;}room.resolution.set(characterId,{mode:q.mode,generation:q.generation});notify(room);}else if(!e.type.startsWith('resolution:')&&policy&&(policy.mode==='free'||e.resolutionGeneration!==policy.generation)){send(ws,{type:'ack',id:e.id,result:'ignored-resolution-generation'});return;}
-      if(!room.seen.has(e.id)){if(room.pendingEvents.size>=1000)throw Error('File RPG Connect pleine : événement non accepté, réessaie après reconnexion du MJ');room.seen.add(e.id);if(room.seen.size>3000)room.seen.delete(room.seen.values().next().value);const fresh=e.type!=='state:changed'||!e.payload?.state||acceptState(room,characterId,e.payload.state);if(fresh){room.pendingEvents.set(e.id,e);send(room.gm,{type:'event',room:room.id,characterId,event:e})}}
+      if(!room.seen.has(e.id)){if(room.pendingEvents.size>=1000)throw Error('File RPG Connect pleine : événement non accepté, réessaie après reconnexion du MJ');room.seen.add(e.id);if(room.seen.size>3000)room.seen.delete(room.seen.values().next().value);const fresh=e.type!=='state:changed'||!e.payload?.state||acceptState(room,characterId,e.payload.state);if(fresh){e.serverEpoch=room.activityEpoch;e.serverOrder=++room.eventOrder;e.serverTime=new Date().toISOString();room.pendingEvents.set(e.id,e);send(room.gm,{type:'event',room:room.id,characterId,event:e})}}
       send(ws,{type:'ack',id:e.id});return;
     }
     if(m.type==='state'&&role==='player'){if(room.resolution.get(characterId)?.mode==='free')return;const value=m.state;if(!value||value.characterId!==characterId||!value.hp)throw Error('État invalide');if(acceptState(room,characterId,value))send(room.gm,{type:'state',room:room.id,characterId,state:value});return}

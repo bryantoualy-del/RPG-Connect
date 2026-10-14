@@ -57,3 +57,17 @@ test('événement joueur retenu tant que le MJ est déconnecté et acquittement 
  let gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;let invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'kentaro'});const token=(await invitation).payload.token;const player=await open();welcome=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'kentaro',token});await welcome;gm.close();await new Promise(r=>gm.once('close',r));const ack=wait(player,'ack');send(player,{type:'event',event:{id:'offline-mj-event',type:'journal:event',characterId:'kentaro',payload:{text:'offline'}}});await ack;
  gm=await open();const replay=wait(gm,'event');send(gm,{type:'hello',role:'gm',room,key:process.env.RPG_CONNECT_GM_KEY});assert.equal((await replay).event.id,'offline-mj-event');send(gm,{type:'event-ack',id:'offline-mj-event'});await new Promise(r=>setTimeout(r,20));const {rooms}=await import('./rpg-connect-server.js');assert.equal(rooms.get(room).pendingEvents.size,0);gm.terminate();player.terminate();
 });
+
+test('activité collective : publication MJ, réception joueur et rejeu après reconnexion',async()=>{
+ const gm=await open(),welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
+ const invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'rufus'});const token=(await invitation).payload.token;
+ const player=await open(),joined=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'rufus',token});await joined;
+ const received=wait(player,'activity'),ack=wait(gm,'activity-ack');send(gm,{type:'activity-publish',payload:{id:'migration-activity',text:'Rufus attaque',damage:7}});
+ const entry=(await received).payload;assert.equal(entry.text,'Rufus attaque');assert.equal((await ack).id,'migration-activity');
+ const duplicate=wait(gm,'activity-ack');send(gm,{type:'activity-publish',payload:{id:'migration-activity',text:'doublon'}});await duplicate;
+ const {rooms}=await import('./rpg-connect-server.js');assert.equal(rooms.get(room).activity.length,1);
+ const denied=wait(player,'error');send(player,{type:'activity-publish',payload:{id:'forged',text:'interdit'}});assert.match((await denied).message,/refusée/);
+ player.terminate();await new Promise(r=>player.once('close',r));
+ const again=await open(),sync=wait(again,'activity-sync');send(again,{type:'hello',role:'player',room,characterId:'rufus',token});const entries=(await sync).payload.entries;assert.equal(entries.length,1);assert.equal(entries[0].id,'migration-activity');
+ gm.terminate();again.terminate();
+});
