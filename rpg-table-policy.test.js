@@ -27,3 +27,13 @@ test('free table default, real sockets: private rolls dropped, state retained, m
  gm.send({type:'session:set',mode:'guided',expectedRevision:1});assert.equal((await gm.wait('session-mode')).payload.mode,'guided');assert.equal((await again.wait('session-mode')).payload.mode,'guided');
  again.send({type:'event',event:{...event,id:'guided-attack'}});assert.equal((await gm.wait('event')).event.id,'guided-attack');
 });
+
+test('lost GM discards unconfirmed Table commands before reconnect, preserves Guided queue',async()=>{
+ const gm=await peer();gm.send({type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await gm.wait('welcome')).room;
+ gm.send({type:'invite',characterId:'samoth'});const token=(await gm.wait('invite')).payload.token;
+ gm.send({type:'command',characterId:'samoth',event:{id:'unconfirmed-turn',type:'state:sync',characterId:'samoth',payload:{session:{phase:'fight',activeCharacterId:'samoth',turnStartRevision:9}}}});await gm.wait('queued');assert.equal(rooms.get(room).pending.size,1);
+ gm.ws.close();await new Promise(r=>gm.ws.once('close',r));
+ const player=await peer();player.send({type:'hello',role:'player',room,characterId:'samoth',token});await player.wait('welcome');assert.equal((await player.wait('table-presence')).payload.gmOnline,false);assert.equal(rooms.get(room).pending.size,0);assert.equal(player.inbox.some(m=>m.type==='command'),false,'no stale turn is replayed before absence is known');
+ const restored=await peer();restored.send({type:'hello',role:'gm',room,key:process.env.RPG_CONNECT_GM_KEY});await restored.wait('welcome');restored.send({type:'session:set',mode:'guided',expectedRevision:1});await restored.wait('session-mode');
+ restored.send({type:'command',characterId:'samoth',event:{id:'guided-retained',type:'state:sync',characterId:'samoth',payload:{}}});await restored.wait('queued');restored.ws.close();await new Promise(r=>restored.ws.once('close',r));assert.equal(rooms.get(room).pending.size,1,'historical Guided delivery is unchanged');
+});

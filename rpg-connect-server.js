@@ -70,7 +70,7 @@ wss.on('connection',ws=>{
     if(m.type==='command-ack'&&role==='player'){const command=room.pending.get(m.id);if(command?.characterId===characterId){room.pending.delete(m.id);send(room.gm,{type:'command-ack',id:m.id,characterId,result:m.result||'applied'})}return}
     throw Error('Opération refusée');
   }catch(error){send(ws,{type:'error',message:String(error.message||'Erreur')});if(!role)ws.close(4003,'Accès refusé')}});
-  ws.on('close',()=>{if(!room)return;if(role==='gm'&&room.gm===ws)room.gm=null;if(role==='player'&&room.players.get(characterId)===ws)room.players.delete(characterId);notify(room)});
+  ws.on('close',()=>{if(!room)return;if(role==='gm'&&room.gm===ws){room.gm=null;if(room.sessionMode===TABLE)room.pending.clear();}if(role==='player'&&room.players.get(characterId)===ws)room.players.delete(characterId);notify(room)});
 });
 const delivery=setInterval(()=>{for(const room of rooms.values()){for(const e of room.pendingEvents.values())send(room.gm,{type:'event',room:room.id,characterId:e.characterId,event:e});for(const cmd of room.pending.values())send(room.players.get(cmd.characterId),cmd);}},1500);delivery.unref();
 const pulse=setInterval(()=>{for(const ws of wss.clients){if(ws.readyState!==WebSocket.OPEN)continue;if(ws.isAlive===false){ws.terminate();continue}ws.isAlive=false;ws.ping()}},30000);pulse.unref();

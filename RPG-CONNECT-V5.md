@@ -8,6 +8,7 @@ Branche coordonnée : `feat/rpg-connect-v5-table-libre`. Livraison à valider av
 - État personnel local prioritaire ; seuls identité, PV, PV temporaires, CA, états, concentration et réaction remontent au groupe. Les jets, ressources, attaques et journaux personnels restent locaux.
 - Encounter conserve l’initiative, les ennemis, le marqueur de tour et son journal d’interventions. Les PV/CA ennemis nécessitent une divulgation explicite du MJ.
 - Les corrections du marqueur ne déclenchent pas de début de tour. Les débuts mécaniques utilisent la révision canonique du participant, avec déduplication persistée.
+- En Table Libre, la perte du MJ purge les commandes non acquittées pour éviter le rejeu d’un ancien début de tour ; la file Guidée reste conservée.
 - Les salles serveur restent en mémoire, comme avant : un redémarrage serveur nécessite de recréer les invitations ; les données personnelles restent persistées sur chaque appareil.
 
 ## Interface et règles
@@ -20,6 +21,6 @@ Les contours d’économie ne remplacent ni les fonds ni les formes des boutons.
 
 Recette et audit centralisés dans `bryantoualy-del/Encounter`, `docs/RPG-CONNECT-V5-AUDIT.md` et `audit/v5-local.test.cjs`.
 
-Contrôles locaux : 348 tests de régression Encounter, 7 tests serveur canonique, 7 parcours DOM (six HTML réels + sept applications connectées au vrai serveur). Riposte, Esquive instinctive, Bouclier, Protection, correction de réaction, ordre mixte, confidentialité ennemie, restauration et journal sont exercés.
+Contrôles locaux : 348 tests de régression Encounter, 8 tests serveur canonique, 7 parcours DOM (six HTML réels + sept applications connectées au vrai serveur). Riposte, Esquive instinctive, Bouclier, Protection, correction de réaction, ordre mixte, confidentialité ennemie, restauration et journal sont exercés.
 
 La validation visuelle est une condition de fusion distincte des tests DOM. Son état courant et les liens vers les captures Chromium/WebKit sont centralisés dans le [dossier de livraison Encounter](https://github.com/bryantoualy-del/Encounter/blob/feat/rpg-connect-v5-table-libre/docs/RPG-CONNECT-V5-LIVRAISON.md). Ne pas considérer une recette écrite ou un test DOM comme une preuve de rendu Safari/iPad.
