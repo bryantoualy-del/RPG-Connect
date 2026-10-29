@@ -1,10 +1,11 @@
 import {createServer} from 'node:http';
 import {randomBytes, timingSafeEqual} from 'node:crypto';
 import {WebSocketServer, WebSocket} from 'ws';
+import {TABLE, GUIDED, validMode, tacticalState, tableEvents, tableCommand} from './rpg-table-policy.js';
 import {appendActivity} from './rpg-activity-protocol.js';
 
-const protocol={protocolVersion:1,serverVersion:'collective-2026-10-12-lot3',capabilities:['collective-activity-v4','manual-corrections-v4','hybrid-resolution-v4','scoped-undo-v1','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1']};
-const coreCapabilities=protocol.capabilities.filter(c=>!['collective-activity-v4','manual-corrections-v4','scoped-undo-v1','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1'].includes(c));
+const protocol={protocolVersion:1,serverVersion:'collective-2026-10-12-lot3',capabilities:['table-free-v5','collective-activity-v4','manual-corrections-v4','hybrid-resolution-v4','scoped-undo-v1','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1']};
+const coreCapabilities=protocol.capabilities.filter(c=>!['table-free-v5','collective-activity-v4','manual-corrections-v4','scoped-undo-v1','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1'].includes(c));
 const characters=new Set(['kentaro','samoth','brackmard','rufus','nans','zephyr']);
 const key=process.env.RPG_CONNECT_GM_KEY;
 if(!key||key.length<24)throw Error('RPG_CONNECT_GM_KEY doit contenir au moins 24 caractères aléatoires.');
@@ -15,7 +16,7 @@ const equal=(a,b)=>{const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||'
 const send=(ws,message)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify({v:1,...message}))};
 const peers=room=>[...new Set([...room.tokens.keys(),...room.states.keys(),...room.players.keys()])].map(characterId=>({characterId,online:room.players.get(characterId)?.readyState===WebSocket.OPEN,state:room.states.get(characterId)||null,resolution:room.resolution.get(characterId)||null}));
 const acceptState=(room,id,value)=>{const epoch=String(value.stateEpoch||'legacy'),revision=Number(value.stateRevision)||0,marks=room.stateWatermarks||(room.stateWatermarks=new Map()),prior=marks.get(id);if(prior&&(prior.retired.has(epoch)||(prior.epoch===epoch&&revision<prior.revision)))return false;const retired=prior?.retired||new Set();if(prior&&prior.epoch!==epoch)retired.add(prior.epoch);marks.set(id,{epoch,revision,retired});room.states.set(id,value);return true};
-const notify=room=>send(room.gm,{type:'roster',room:room.id,payload:{players:peers(room)}});
+const notify=room=>{send(room.gm,{type:'roster',room:room.id,payload:{players:peers(room)}});if(room.sessionMode===TABLE)for(const peer of room.players.values())send(peer,{type:'table-presence',payload:{gmOnline:room.gm?.readyState===WebSocket.OPEN}});};
 const server=createServer((req,res)=>{if(req.url==='/health'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size,...protocol}));return}res.writeHead(404);res.end()});
 const wss=new WebSocketServer({server,maxPayload:65536,verifyClient:({origin},done)=>done(!origins.length||origins.includes(origin),403,'Origin non autorisée')});
 wss.on('connection',ws=>{
@@ -26,18 +27,25 @@ wss.on('connection',ws=>{
     if(!role){
       if(m.type!=='hello')throw Error('Identification requise');
       if((m.protocolVersion!==protocol.protocolVersion)||coreCapabilities.some(c=>!m.clientCapabilities?.includes(c))||(m.requiredCapabilities||[]).some(c=>!protocol.capabilities.includes(c))){send(ws,{type:'error',code:'PROTOCOL_INCOMPATIBLE',message:'RPG Connect incompatible : protocole/capacités requis non disponibles',...protocol});ws.close(4002,'Protocole incompatible');return}
+      if(((m.role==='gm'&&(rooms.get(String(m.room||''))?.sessionMode||m.sessionMode||TABLE)!==GUIDED)||(m.role==='player'&&rooms.get(String(m.room||''))?.sessionMode===TABLE))&&!m.clientCapabilities?.includes('table-free-v5')){send(ws,{type:'error',code:'PROTOCOL_INCOMPATIBLE',message:'Mettre à jour le client pour le mode Table Libre V5',...protocol});ws.close(4002,'Table Libre V5 requise');return;}
       if(m.role==='gm'){
         if(!equal(m.key,key))throw Error('Clé MJ invalide');
         const requested=String(m.room||'').trim();const roomId=requested&&/^[A-Z0-9_-]{6,32}$/i.test(requested)?requested:random(8);room=rooms.get(roomId);
-        if(!room){room={activityEpoch:random(12),eventOrder:0,activity:[],activityIds:new Map(),id:roomId,gm:null,players:new Map(),tokens:new Map(),states:new Map(),seen:new Set(),pending:new Map(),pendingEvents:new Map(),resolution:new Map()};rooms.set(roomId,room)}
-        if(room.gm&&room.gm!==ws)room.gm.close(4001,'Autre session MJ');room.gm=ws;role='gm';send(ws,{type:'welcome',...protocol,room:room.id,role:'gm',payload:{players:peers(room)}});for(const event of room.pendingEvents.values())send(ws,{type:'event',room:room.id,characterId:event.characterId,event});send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.activity}});notify(room);return;
+        if(!room){room={sessionMode:validMode(m.sessionMode)?m.sessionMode:TABLE,modeRevision:1,activityEpoch:random(12),eventOrder:0,activity:[],activityIds:new Map(),id:roomId,gm:null,players:new Map(),tokens:new Map(),states:new Map(),seen:new Set(),pending:new Map(),pendingEvents:new Map(),resolution:new Map()};rooms.set(roomId,room)}
+        if(room.gm&&room.gm!==ws)room.gm.close(4001,'Autre session MJ');room.gm=ws;role='gm';send(ws,{type:'welcome',...protocol,room:room.id,role:'gm',payload:{players:peers(room),sessionMode:room.sessionMode,modeRevision:room.modeRevision}});for(const event of room.pendingEvents.values())send(ws,{type:'event',room:room.id,characterId:event.characterId,event});send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.sessionMode===TABLE?[]:room.activity}});notify(room);return;
       }
       if(m.role==='player'){
         const r=rooms.get(String(m.room||'')),id=String(m.characterId||'').toLowerCase();if(!r||!characters.has(id)||!equal(m.token,r.tokens.get(id)))throw Error('Invitation invalide');
-        room=r;role='player';characterId=id;const old=room.players.get(id);if(old&&old!==ws)old.close(4001,'Nouvelle connexion');room.players.set(id,ws);send(ws,{type:'welcome',...protocol,room:room.id,role:'player',characterId:id});for(const [commandId,cmd] of room.pending)if(cmd.characterId===id)send(ws,cmd);send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.activity}});notify(room);return;
+        room=r;role='player';characterId=id;const old=room.players.get(id);if(old&&old!==ws)old.close(4001,'Nouvelle connexion');room.players.set(id,ws);send(ws,{type:'welcome',...protocol,room:room.id,role:'player',characterId:id,payload:{sessionMode:room.sessionMode,modeRevision:room.modeRevision}});for(const [commandId,cmd] of room.pending)if(cmd.characterId===id)send(ws,cmd);send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.sessionMode===TABLE?[]:room.activity}});notify(room);return;
       }
       throw Error('Rôle invalide');
     }
+    if(m.type==='session:set'&&role==='gm'){
+      if(!validMode(m.mode)||m.expectedRevision!==room.modeRevision){send(ws,{type:'session-mode',payload:{mode:room.sessionMode,revision:room.modeRevision,conflict:true}});return;}
+      if(m.mode!==room.sessionMode){room.sessionMode=m.mode;room.modeRevision++;room.pending.clear();room.pendingEvents.clear();if(m.mode===TABLE)for(const [id,s] of room.states)room.states.set(id,tacticalState(s));}
+      const message={type:'session-mode',payload:{mode:room.sessionMode,revision:room.modeRevision}};send(room.gm,message);for(const peer of room.players.values())send(peer,message);return;
+    }
+    if(room.sessionMode===TABLE&&m.type==='activity-publish')return;
     if(m.type==='activity-publish'&&role==='gm'){
       const {entry,fresh}=appendActivity(room,m.payload);if(fresh){send(room.gm,{type:'activity',room:room.id,payload:entry});for(const peer of room.players.values())send(peer,{type:'activity',room:room.id,payload:entry});}
       send(ws,{type:'activity-ack',id:entry.id,payload:entry});return;
@@ -46,14 +54,16 @@ wss.on('connection',ws=>{
     if(m.type==='invite'&&role==='gm'){const id=String(m.characterId||'').toLowerCase();if(!characters.has(id))throw Error('Personnage inconnu');const token=room.tokens.get(id)||random(24);room.tokens.set(id,token);send(ws,{type:'invite',room:room.id,characterId:id,payload:{token}});return}
     if(m.type==='event'&&role==='player'){
       const e=m.event;if(!e||typeof e.id!=='string'||e.id.length>120||typeof e.type!=='string'||e.characterId!==characterId)throw Error('Événement invalide');
-      const policy=room.resolution.get(characterId);if(e.type==='resolution:mode'){const q=e.payload||{};if(!['free','encounter'].includes(q.mode)||!Number.isSafeInteger(q.generation))throw Error('Mode invalide');if(q.generation<(policy?.generation||0)){send(ws,{type:'ack',id:e.id,result:'ignored-resolution-generation'});return;}room.resolution.set(characterId,{mode:q.mode,generation:q.generation});notify(room);}else if(!e.type.startsWith('resolution:')&&policy&&(policy.mode==='free'||e.resolutionGeneration!==policy.generation)){send(ws,{type:'ack',id:e.id,result:'ignored-resolution-generation'});return;}
+      if(room.sessionMode===TABLE&&!tableEvents.has(e.type)){send(ws,{type:'ack',id:e.id,result:'local-only'});return;}
+      const policy=room.sessionMode===TABLE?null:room.resolution.get(characterId);if(e.type==='resolution:mode'){const q=e.payload||{};if(!['free','encounter'].includes(q.mode)||!Number.isSafeInteger(q.generation))throw Error('Mode invalide');if(q.generation<(policy?.generation||0)){send(ws,{type:'ack',id:e.id,result:'ignored-resolution-generation'});return;}room.resolution.set(characterId,{mode:q.mode,generation:q.generation});notify(room);}else if(!e.type.startsWith('resolution:')&&policy&&(policy.mode==='free'||e.resolutionGeneration!==policy.generation)){send(ws,{type:'ack',id:e.id,result:'ignored-resolution-generation'});return;}
       if(!room.seen.has(e.id)){if(room.pendingEvents.size>=1000)throw Error('File RPG Connect pleine : événement non accepté, réessaie après reconnexion du MJ');room.seen.add(e.id);if(room.seen.size>3000)room.seen.delete(room.seen.values().next().value);const fresh=e.type!=='state:changed'||!e.payload?.state||acceptState(room,characterId,e.payload.state);if(fresh){e.serverEpoch=room.activityEpoch;e.serverOrder=++room.eventOrder;e.serverTime=new Date().toISOString();room.pendingEvents.set(e.id,e);send(room.gm,{type:'event',room:room.id,characterId,event:e})}}
       send(ws,{type:'ack',id:e.id});return;
     }
-    if(m.type==='state'&&role==='player'){if(room.resolution.get(characterId)?.mode==='free')return;const value=m.state;if(!value||value.characterId!==characterId||!value.hp)throw Error('État invalide');if(acceptState(room,characterId,value))send(room.gm,{type:'state',room:room.id,characterId,state:value});return}
+    if(m.type==='state'&&role==='player'){if(room.sessionMode!==TABLE&&room.resolution.get(characterId)?.mode==='free')return;const value=room.sessionMode===TABLE?tacticalState(m.state||{}):m.state;if(!value||value.characterId!==characterId||!value.hp)throw Error('État invalide');if(acceptState(room,characterId,value))send(room.gm,{type:'state',room:room.id,characterId,state:value});return}
     if(m.type==='command'&&role==='gm'){
-      const e=m.event,id=String(m.characterId||'').toLowerCase();if(!characters.has(id)||!e||typeof e.id!=='string'||e.id.length>120||!/^[A-Za-z][A-Za-z-]*:[A-Za-z][A-Za-z-]*$/.test(e.type)||e.characterId!==id)throw Error('Commande invalide');
+      let e=m.event;const id=String(m.characterId||'').toLowerCase();if(!characters.has(id)||!e||typeof e.id!=='string'||e.id.length>120||!/^[A-Za-z][A-Za-z-]*:[A-Za-z][A-Za-z-]*$/.test(e.type)||e.characterId!==id)throw Error('Commande invalide');
       const allowed=new Set(['correction:result','resolution:accepted','hp:damage','hp:heal','hp:set','tempHp:set','resource:set','inventory:add','inventory:update','inventory:remove','turn:next','turn:close','turn:end-rejected','turn:grant','attack:decision','attack:grant','message:gm','reaction:requested','initiative:request','initiative:retry','targets:set','target:clear','state:sync','conditions:set','defense:turn-ended','enemy:attack-result','save:result','concentration:request','concentration:break','concentration:ack','reaction:request','reaction:grant','reaction:closed','trigger:request','trigger:ack','player-save:request','player-save:ack','undo:prepare','undo:commit','undo:finalize','undo:abort']);if(!allowed.has(e.type))throw Error('Commande non autorisée');
+      if(room.sessionMode===TABLE){e=tableCommand(e);if(!e){send(ws,{type:'queued',id:m.event.id,characterId:id,result:'local-only'});return;}}
       if(!room.pending.has(e.id)){if(room.pending.size>=200)throw Error('File commandes pleine : commande non acceptée, aucune commande existante supprimée');room.pending.set(e.id,{type:'command',room:room.id,characterId:id,event:e})}
       send(room.players.get(id),room.pending.get(e.id));send(ws,{type:'queued',id:e.id,characterId:id,online:room.players.get(id)?.readyState===WebSocket.OPEN});return;
     }

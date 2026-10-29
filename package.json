@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node rpg-connect-server.js",
-    "test": "node --test rpg-connect-protocol.test.js"
+    "test": "node --test rpg-connect-protocol.test.js rpg-table-policy.test.js"
   },
   "dependencies": {
     "ws": "^8.18.3"
