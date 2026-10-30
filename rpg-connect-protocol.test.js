@@ -10,7 +10,7 @@ const send=(ws,message)=>ws.send(JSON.stringify({v:1,protocolVersion:1,clientCap
 const wait=(ws,type)=>new Promise((resolve,reject)=>{let timer=setTimeout(()=>{ws.off('message',receive);reject(Error('timeout '+type))},1500);function receive(raw){const value=JSON.parse(String(raw));if(value.type!==type)return;clearTimeout(timer);ws.off('message',receive);resolve(value)}ws.on('message',receive)});
 
 test('salle, invitation, événement, déduplication, commande MJ et ack',async()=>{
- const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;assert.ok(room);
+ const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;assert.ok(room);
  let invite=wait(gm,'invite');send(gm,{type:'invite',characterId:'samoth'});const token=(await invite).payload.token;assert.ok(token.length>24);
  invite=wait(gm,'invite');send(gm,{type:'invite',characterId:'samoth'});assert.equal((await invite).payload.token,token);
  const player=await open();let joined=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'samoth',token});assert.equal((await joined).characterId,'samoth');
@@ -24,13 +24,13 @@ test('salle, invitation, événement, déduplication, commande MJ et ack',async(
  let queued=wait(gm,'queued');send(gm,{type:'command',characterId:'samoth',event:{id:'gm-offline-1',type:'tempHp:set',characterId:'samoth',payload:{value:12}}});assert.equal((await queued).online,false);
  const again=await open(),rejoined=wait(again,'welcome'),replayed=wait(again,'command');send(again,{type:'hello',role:'player',room,characterId:'samoth',token});await rejoined;assert.equal((await replayed).event.id,'gm-offline-1');
  let confirmed=wait(gm,'command-ack');send(again,{type:'command-ack',id:'gm-offline-1',result:'applied'});assert.equal((await confirmed).id,'gm-offline-1');
- const fake=await open();let error=wait(fake,'error');send(fake,{type:'hello',role:'gm',key:'incorrect'});assert.match((await error).message,/Clé MJ/);
+ const fake=await open();let error=wait(fake,'error');send(fake,{type:'hello',role:'gm',sessionMode:'guided',key:'incorrect'});assert.match((await error).message,/Clé MJ/);
  gm.close();again.close();fake.close();
 });
 
 
 test('contrat MJ étendu : toutes les commandes Encounter autorisées traversent le serveur',async()=>{
- const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
+ const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
  let invite=wait(gm,'invite');send(gm,{type:'invite',characterId:'kentaro'});const token=(await invite).payload.token;
  const player=await open();let joined=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'kentaro',token});await joined;
  const commandTypes=['state:sync','conditions:set','turn:end-rejected','turn:close','defense:turn-ended','enemy:attack-result','save:result','initiative:retry'];
@@ -48,18 +48,18 @@ test.after(async()=>{for(const client of wss.clients)client.terminate();await ne
 
 test('protocole et capacités incompatibles : refus explicite',async()=>{
  for(const extra of [{protocolVersion:2},{protocolVersion:1,requiredCapabilities:['unknown-capability']}]){
-  const client=await open(),failure=wait(client,'error');send(client,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY,...extra});const error=await failure;assert.equal(error.code,'PROTOCOL_INCOMPATIBLE');assert.match(error.message,/incompatible/);client.terminate();
+  const client=await open(),failure=wait(client,'error');send(client,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY,...extra});const error=await failure;assert.equal(error.code,'PROTOCOL_INCOMPATIBLE');assert.match(error.message,/incompatible/);client.terminate();
  }
  const response=await fetch(url.replace('ws:','http:')+'/health'),health=await response.json();assert.equal(health.protocolVersion,1);assert.ok(health.capabilities.includes('authoritative-save-v1'));
 });
 
 test('événement joueur retenu tant que le MJ est déconnecté et acquittement final',async()=>{
- let gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;let invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'kentaro'});const token=(await invitation).payload.token;const player=await open();welcome=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'kentaro',token});await welcome;gm.close();await new Promise(r=>gm.once('close',r));const ack=wait(player,'ack');send(player,{type:'event',event:{id:'offline-mj-event',type:'journal:event',characterId:'kentaro',payload:{text:'offline'}}});await ack;
+ let gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;let invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'kentaro'});const token=(await invitation).payload.token;const player=await open();welcome=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'kentaro',token});await welcome;gm.close();await new Promise(r=>gm.once('close',r));const ack=wait(player,'ack');send(player,{type:'event',event:{id:'offline-mj-event',type:'journal:event',characterId:'kentaro',payload:{text:'offline'}}});await ack;
  gm=await open();const replay=wait(gm,'event');send(gm,{type:'hello',role:'gm',room,key:process.env.RPG_CONNECT_GM_KEY});assert.equal((await replay).event.id,'offline-mj-event');send(gm,{type:'event-ack',id:'offline-mj-event'});await new Promise(r=>setTimeout(r,20));const {rooms}=await import('./rpg-connect-server.js');assert.equal(rooms.get(room).pendingEvents.size,0);gm.terminate();player.terminate();
 });
 
 test('activité collective : publication MJ, réception joueur et rejeu après reconnexion',async()=>{
- const gm=await open(),welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
+ const gm=await open(),welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
  const invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'rufus'});const token=(await invitation).payload.token;
  const player=await open(),joined=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'rufus',token});await joined;
  const received=wait(player,'activity'),ack=wait(gm,'activity-ack');send(gm,{type:'activity-publish',payload:{id:'migration-activity',text:'Rufus attaque',damage:7}});
