@@ -6,7 +6,7 @@ import {appendActivity} from './rpg-activity-protocol.js';
 
 const protocol={protocolVersion:1,serverVersion:'collective-2026-10-12-lot3',capabilities:['table-free-v5','collective-activity-v4','manual-corrections-v4','hybrid-resolution-v4','scoped-undo-v1','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1']};
 const coreCapabilities=protocol.capabilities.filter(c=>!['table-free-v5','collective-activity-v4','manual-corrections-v4','scoped-undo-v1','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1'].includes(c));
-const characters=new Set(['kentaro','samoth','brackmard','rufus','nans','zephyr']);
+const characters=new Set(['kentaro','samoth','brackmard','rufus','nans','zephyr','kobe']);
 const key=process.env.RPG_CONNECT_GM_KEY;
 if(!key||key.length<24)throw Error('RPG_CONNECT_GM_KEY doit contenir au moins 24 caractères aléatoires.');
 const origins=(process.env.RPG_CONNECT_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean);

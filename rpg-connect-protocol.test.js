@@ -29,6 +29,13 @@ test('salle, invitation, événement, déduplication, commande MJ et ack',async(
 });
 
 
+test('Kobe joins Table Libre with a personal invitation; unknown identities remain rejected',async()=>{
+ const gm=await open();let welcomed=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY,clientCapabilities:['table-free-v5',...['hybrid-resolution-v4','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions']]});const room=(await welcomed).room;
+ const invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'kobe'});const token=(await invitation).payload.token;
+ const player=await open();const joined=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'kobe',token,clientCapabilities:['table-free-v5','hybrid-resolution-v4','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions']});assert.equal((await joined).characterId,'kobe');
+ const rejected=wait(gm,'error');send(gm,{type:'invite',characterId:'unknown'});assert.match((await rejected).message,/inconnu/);player.close();gm.close();
+});
+
 test('contrat MJ étendu : toutes les commandes Encounter autorisées traversent le serveur',async()=>{
  const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
  let invite=wait(gm,'invite');send(gm,{type:'invite',characterId:'kentaro'});const token=(await invite).payload.token;
