@@ -35,7 +35,7 @@ wss.on('connection',ws=>{
         if(room.gm&&room.gm!==ws)room.gm.close(4001,'Autre session MJ');room.gm=ws;role='gm';send(ws,{type:'welcome',...protocol,room:room.id,role:'gm',payload:{players:peers(room),sessionMode:room.sessionMode,modeRevision:room.modeRevision}});for(const event of room.pendingEvents.values())send(ws,{type:'event',room:room.id,characterId:event.characterId,event});send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.sessionMode===TABLE?[]:room.activity}});notify(room);return;
       }
       if(m.role==='player'){
-        const r=rooms.get(String(m.room||'')),id=String(m.characterId||'').toLowerCase();if(!r||!characters.has(id)||!equal(m.token,r.tokens.get(id)))throw Error('Invitation invalide');
+        const r=rooms.get(String(m.room||'')),id=String(m.characterId||'').toLowerCase();if(!r||!characters.has(id)||!r.tokens.has(id)||typeof m.token!=='string'||!m.token||!equal(m.token,r.tokens.get(id)))throw Error('Invitation invalide');
         room=r;role='player';characterId=id;const old=room.players.get(id);if(old&&old!==ws)old.close(4001,'Nouvelle connexion');room.players.set(id,ws);send(ws,{type:'welcome',...protocol,room:room.id,role:'player',characterId:id,payload:{sessionMode:room.sessionMode,modeRevision:room.modeRevision}});for(const [commandId,cmd] of room.pending)if(cmd.characterId===id)send(ws,cmd);send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.sessionMode===TABLE?[]:room.activity}});notify(room);return;
       }
       throw Error('Rôle invalide');
