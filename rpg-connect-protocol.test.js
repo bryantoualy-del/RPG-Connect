@@ -9,6 +9,19 @@ const open=()=>new Promise((resolve,reject)=>{let ws=new WebSocket(url);ws.once(
 const send=(ws,message)=>ws.send(JSON.stringify({v:1,protocolVersion:1,clientCapabilities:['hybrid-resolution-v4','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions'],...message}));
 const wait=(ws,type)=>new Promise((resolve,reject)=>{let timer=setTimeout(()=>{ws.off('message',receive);reject(Error('timeout '+type))},1500);function receive(raw){const value=JSON.parse(String(raw));if(value.type!==type)return;clearTimeout(timer);ws.off('message',receive);resolve(value)}ws.on('message',receive)});
 
+test('un joueur sans jeton ne peut pas rejoindre une salle avant émission de son invitation',async()=>{
+ const gm=await open();const welcome=wait(gm,'welcome');
+ send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});
+ const room=(await welcome).room;
+ try {
+   for(const characterId of ['kobe','samoth']){
+     const player=await open();const denied=wait(player,'error');
+     send(player,{type:'hello',role:'player',room,characterId,token:''});
+     assert.match((await denied).message,/Invitation invalide/);player.close();
+   }
+ }finally{gm.close();}
+});
+
 test('salle, invitation, événement, déduplication, commande MJ et ack',async()=>{
  const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;assert.ok(room);
  let invite=wait(gm,'invite');send(gm,{type:'invite',characterId:'samoth'});const token=(await invite).payload.token;assert.ok(token.length>24);
@@ -28,6 +41,13 @@ test('salle, invitation, événement, déduplication, commande MJ et ack',async(
  gm.close();again.close();fake.close();
 });
 
+
+test('Kobe joins Table Libre with a personal invitation; unknown identities remain rejected',async()=>{
+ const gm=await open();let welcomed=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY,clientCapabilities:['table-free-v5',...['hybrid-resolution-v4','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions']]});const room=(await welcomed).room;
+ const invitation=wait(gm,'invite');send(gm,{type:'invite',characterId:'kobe'});const token=(await invitation).payload.token;
+ const player=await open();const joined=wait(player,'welcome');send(player,{type:'hello',role:'player',room,characterId:'kobe',token,clientCapabilities:['table-free-v5','hybrid-resolution-v4','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions']});assert.equal((await joined).characterId,'kobe');
+ const rejected=wait(gm,'error');send(gm,{type:'invite',characterId:'unknown'});assert.match((await rejected).message,/inconnu/);player.close();gm.close();
+});
 
 test('contrat MJ étendu : toutes les commandes Encounter autorisées traversent le serveur',async()=>{
  const gm=await open();let welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',sessionMode:'guided',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;

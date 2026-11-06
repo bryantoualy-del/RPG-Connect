@@ -6,7 +6,7 @@ import {appendActivity} from './rpg-activity-protocol.js';
 
 const protocol={protocolVersion:1,serverVersion:'collective-2026-10-12-lot3',capabilities:['table-free-v5','collective-activity-v4','manual-corrections-v4','hybrid-resolution-v4','scoped-undo-v1','event-receipts','initiative-ack','attack-id-ledger','authoritative-save-v1','state-revisions','condition-revisions','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1']};
 const coreCapabilities=protocol.capabilities.filter(c=>!['table-free-v5','collective-activity-v4','manual-corrections-v4','scoped-undo-v1','companion-concentration-v1','reaction-transactions-v1','triggered-effects-v1','player-save-requests-v1'].includes(c));
-const characters=new Set(['kentaro','samoth','brackmard','rufus','nans','zephyr']);
+const characters=new Set(['kentaro','samoth','brackmard','rufus','nans','zephyr','kobe']);
 const key=process.env.RPG_CONNECT_GM_KEY;
 if(!key||key.length<24)throw Error('RPG_CONNECT_GM_KEY doit contenir au moins 24 caractères aléatoires.');
 const origins=(process.env.RPG_CONNECT_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean);
@@ -35,7 +35,7 @@ wss.on('connection',ws=>{
         if(room.gm&&room.gm!==ws)room.gm.close(4001,'Autre session MJ');room.gm=ws;role='gm';send(ws,{type:'welcome',...protocol,room:room.id,role:'gm',payload:{players:peers(room),sessionMode:room.sessionMode,modeRevision:room.modeRevision}});for(const event of room.pendingEvents.values())send(ws,{type:'event',room:room.id,characterId:event.characterId,event});send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.sessionMode===TABLE?[]:room.activity}});notify(room);return;
       }
       if(m.role==='player'){
-        const r=rooms.get(String(m.room||'')),id=String(m.characterId||'').toLowerCase();if(!r||!characters.has(id)||!equal(m.token,r.tokens.get(id)))throw Error('Invitation invalide');
+        const r=rooms.get(String(m.room||'')),id=String(m.characterId||'').toLowerCase();if(!r||!characters.has(id)||!r.tokens.has(id)||typeof m.token!=='string'||!m.token||!equal(m.token,r.tokens.get(id)))throw Error('Invitation invalide');
         room=r;role='player';characterId=id;const old=room.players.get(id);if(old&&old!==ws)old.close(4001,'Nouvelle connexion');room.players.set(id,ws);send(ws,{type:'welcome',...protocol,room:room.id,role:'player',characterId:id,payload:{sessionMode:room.sessionMode,modeRevision:room.modeRevision}});for(const [commandId,cmd] of room.pending)if(cmd.characterId===id)send(ws,cmd);send(ws,{type:'activity-sync',room:room.id,payload:{serverEpoch:room.activityEpoch,entries:room.sessionMode===TABLE?[]:room.activity}});notify(room);return;
       }
       throw Error('Rôle invalide');
