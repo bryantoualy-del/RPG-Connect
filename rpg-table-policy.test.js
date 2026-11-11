@@ -13,7 +13,7 @@ test('explicit enemy disclosure, private state whitelist',()=>{
  const p=tacticalPayload({health:{current:40},inventory:['secret'],conditionActors:[{id:'enemy',kind:'enemy',name:'Cultiste',health:{current:91,max:99},ac:22,resources:{secret:1},conditions:[]}]});
  assert.equal(p.health,undefined);assert.equal(p.inventory,undefined);assert.equal(p.conditionActors[0].health,undefined);assert.equal(p.conditionActors[0].ac,undefined);
  const disclosed=tacticalPayload({conditionActors:[{kind:'enemy',publicHealth:true,publicAc:true,health:{current:7,max:12},ac:15}]});assert.equal(disclosed.conditionActors[0].health.current,7);assert.equal(disclosed.conditionActors[0].ac,15);
- const s=tacticalState({characterId:'samoth',hp:{current:60,max:72,temp:3,tempMetadata:{secret:1}},turn:{reaction:false,action:true},resources:{slots:5},inventory:['secret'],journal:['secret']});assert.deepEqual(s.hp,{current:60,max:72,temp:3});assert.deepEqual(s.turn,{reaction:false});assert.equal(s.resources,undefined);
+ const s=tacticalState({characterId:'samoth',hp:{current:60,max:72,temp:3,tempMetadata:{secret:1}},turn:{reaction:false,action:true,bonus:false},resources:{slots:5},inventory:['secret'],journal:['secret']});assert.deepEqual(s.hp,{current:60,max:72,temp:3});assert.deepEqual(s.turn,{action:true,bonus:false,reaction:false});assert.equal(s.resources,undefined);
 });
 test('free table never permits MJ to mutate a Companion\'s PV or conditions',()=>{
  for(const type of ['hp:set','tempHp:set','conditions:set']){
