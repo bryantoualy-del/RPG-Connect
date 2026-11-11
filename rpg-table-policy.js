@@ -23,9 +23,9 @@ export function tacticalPayload(q={}){
  return p;
 }
 export const tableEvents=new Set(['initiative:rolled','turn:end-request']);
-export const tableCommands=new Set(['state:sync','targets:set','target:clear','message:gm','initiative:request','initiative:retry','turn:grant','turn:close','defense:turn-ended','hp:set','tempHp:set','conditions:set']);
+export // Table libre : seules les publications du Companion font autorité pour ses PV et états.
+const tableCommands=new Set(['state:sync','targets:set','target:clear','message:gm','initiative:request','initiative:retry','turn:grant','turn:close','defense:turn-ended']);
 export function tableCommand(event){
  if(!tableCommands.has(event.type))return null;
- if(['hp:set','tempHp:set','conditions:set'].includes(event.type))return event; // explicit MJ correction, never a snapshot overwrite
  return {...event,payload:tacticalPayload(event.payload)};
 }
