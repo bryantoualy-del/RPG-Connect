@@ -1,7 +1,7 @@
 import {test,after} from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import {tacticalState,tacticalPayload} from './rpg-table-policy.js';
+import {tacticalState,tacticalPayload,tableCommand} from './rpg-table-policy.js';
 process.env.PORT='0';process.env.RPG_CONNECT_GM_KEY='test-table-key-at-least-24-characters';
 const {server,rooms}=await import('./rpg-connect-server.js');
 await new Promise(r=>server.listening?r():server.once('listening',r));
@@ -13,12 +13,29 @@ test('explicit enemy disclosure, private state whitelist',()=>{
  const p=tacticalPayload({health:{current:40},inventory:['secret'],conditionActors:[{id:'enemy',kind:'enemy',name:'Cultiste',health:{current:91,max:99},ac:22,resources:{secret:1},conditions:[]}]});
  assert.equal(p.health,undefined);assert.equal(p.inventory,undefined);assert.equal(p.conditionActors[0].health,undefined);assert.equal(p.conditionActors[0].ac,undefined);
  const disclosed=tacticalPayload({conditionActors:[{kind:'enemy',publicHealth:true,publicAc:true,health:{current:7,max:12},ac:15}]});assert.equal(disclosed.conditionActors[0].health.current,7);assert.equal(disclosed.conditionActors[0].ac,15);
- const s=tacticalState({characterId:'samoth',hp:{current:60,max:72,temp:3,tempMetadata:{secret:1}},turn:{reaction:false,action:true},resources:{slots:5},inventory:['secret'],journal:['secret']});assert.deepEqual(s.hp,{current:60,max:72,temp:3});assert.deepEqual(s.turn,{reaction:false});assert.equal(s.resources,undefined);
+ const s=tacticalState({characterId:'samoth',hp:{current:60,max:72,temp:3,tempMetadata:{secret:1}},turn:{reaction:false,action:true,bonus:false},resources:{slots:5},inventory:['secret'],journal:['secret']});assert.deepEqual(s.hp,{current:60,max:72,temp:3});assert.deepEqual(s.turn,{action:true,bonus:false,reaction:false});assert.equal(s.resources,undefined);
 });
+test('free table never permits MJ to mutate a Companion\'s PV or conditions',()=>{
+ for(const type of ['hp:set','tempHp:set','conditions:set']){
+   assert.equal(tableCommand({id:'old-mj-correction',type,characterId:'samoth',payload:{amount:99,conditions:[{name:'charmed'}]}}),null,type);
+ }
+ const sync=tableCommand({type:'state:sync',payload:{conditionActors:[],hp:{current:1},statuses:['charmed']}});
+ assert.equal(sync.type,'state:sync');
+ assert.equal(sync.payload.hp,undefined);
+ assert.equal(sync.payload.statuses,undefined);
+});
+
 test('free table default, real sockets: private rolls dropped, state retained, mode CAS and reconnect',async()=>{
  const gm=await peer();gm.send({type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const welcome=await gm.wait('welcome'),room=welcome.room;assert.equal(welcome.payload.sessionMode,'table-free');
  gm.send({type:'invite',characterId:'samoth'});const token=(await gm.wait('invite')).payload.token;
  const player=await peer();player.send({type:'hello',role:'player',room,characterId:'samoth',token});assert.equal((await player.wait('welcome')).payload.sessionMode,'table-free');
+ for(const type of ['hp:set','tempHp:set','conditions:set']){
+  const id='blocked-'+type.replace(':','-');
+  gm.send({type:'command',characterId:'samoth',event:{id,type,characterId:'samoth',payload:{current:1,statuses:['charmed']}}});
+  assert.equal((await gm.wait('queued')).result,'local-only');
+  assert.equal(rooms.get(room).pending.has(id),false);
+  assert.equal(player.inbox.some(m=>m.type==='command'&&m.event?.id===id),false);
+ }
  const event={id:'local-attack',type:'attack:damage',characterId:'samoth',payload:{amount:1000}};player.send({type:'event',event});assert.equal((await player.wait('ack')).result,'local-only');assert.equal(rooms.get(room).pendingEvents.size,0);
  player.send({type:'state',state:{characterId:'samoth',stateEpoch:'a',stateRevision:4,hp:{current:51,max:72,temp:0},turn:{reaction:false},resources:{slots:4}}});const state=await gm.wait('state');assert.equal(state.state.hp.current,51);assert.equal(state.state.resources,undefined);
  player.send({type:'state',state:{characterId:'samoth',stateEpoch:'a',stateRevision:2,hp:{current:72,max:72,temp:0},turn:{reaction:true}}});
