@@ -54,3 +54,36 @@ test('lost GM discards unconfirmed Table commands before reconnect, preserves Gu
  const restored=await peer();restored.send({type:'hello',role:'gm',room,key:process.env.RPG_CONNECT_GM_KEY});await restored.wait('welcome');restored.send({type:'session:set',mode:'guided',expectedRevision:1});await restored.wait('session-mode');
  restored.send({type:'command',characterId:'samoth',event:{id:'guided-retained',type:'state:sync',characterId:'samoth',payload:{}}});await restored.wait('queued');restored.ws.close();await new Promise(r=>restored.ws.once('close',r));assert.equal(rooms.get(room).pending.size,1,'historical Guided delivery is unchanged');
 });
+
+test('Table Libre keeps turn signals ordered and idempotent through GM reconnect',async()=>{
+ const gm=await peer();
+ gm.send({type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});
+ const {room}=await gm.wait('welcome');
+ gm.send({type:'invite',characterId:'samoth'});
+ const {token}=(await gm.wait('invite')).payload;
+ const player=await peer();
+ player.send({type:'hello',role:'player',room,characterId:'samoth',token});
+ await player.wait('welcome');
+ gm.ws.close();
+ await new Promise(resolve=>gm.ws.once('close',resolve));
+
+ for(const revision of [7,7,8]){
+  const event={id:'end-'+revision,type:'turn:end-request',characterId:'samoth',
+    payload:{participantId:'cc-samoth',turnStartRevision:revision}};
+  player.send({type:'event',event});
+  assert.equal((await player.wait('ack')).id,event.id);
+ }
+ assert.equal(rooms.get(room).pendingEvents.size,2);
+ const restored=await peer();
+ restored.send({type:'hello',role:'gm',room,key:process.env.RPG_CONNECT_GM_KEY});
+ await restored.wait('welcome');
+ const first=(await restored.wait('event')).event;
+ const second=(await restored.wait('event')).event;
+ assert.deepEqual([first.id,second.id],['end-7','end-8']);
+ assert.equal(second.serverOrder,first.serverOrder+1);
+ assert.equal(second.serverEpoch,first.serverEpoch);
+ for(const event of [first,second])restored.send({type:'event-ack',id:event.id});
+ restored.send({type:'invite',characterId:'samoth'});
+ await restored.wait('invite');
+ assert.equal(rooms.get(room).pendingEvents.size,0);
+});
