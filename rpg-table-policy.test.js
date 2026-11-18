@@ -87,3 +87,28 @@ test('Table Libre keeps turn signals ordered and idempotent through GM reconnect
  await restored.wait('invite');
  assert.equal(rooms.get(room).pendingEvents.size,0);
 });
+
+test('Table Libre retains only Zephyr’s active blessing declaration through GM reconnect',async()=>{
+ const gm=await peer();
+ gm.send({type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});
+ const {room}=await gm.wait('welcome');
+ const blessing={id:'cast-one',room,remaining:10,targets:['cc-rufus','cc-kentaro','cc-rufus']};
+ const hp={current:90,max:92,temp:0};
+ assert.equal(tacticalState({characterId:'kobe',hp,concentration:true,blessing}).blessing,undefined);
+ gm.send({type:'invite',characterId:'zephyr'});
+ const {token}=(await gm.wait('invite')).payload;
+ const zephyr=await peer();
+ zephyr.send({type:'hello',role:'player',room,characterId:'zephyr',token});
+ await zephyr.wait('welcome');
+ const caster={characterId:'zephyr',stateEpoch:'cast-test',hp};
+ zephyr.send({type:'state',state:{...caster,stateRevision:1,concentration:true,blessing}});
+ assert.deepEqual((await gm.wait('state')).state.blessing,{...blessing,targets:['cc-rufus','cc-kentaro']});
+ gm.ws.close();
+ await new Promise(resolve=>gm.ws.once('close',resolve));
+ const restored=await peer();
+ restored.send({type:'hello',role:'gm',room,key:process.env.RPG_CONNECT_GM_KEY});
+ const roster=(await restored.wait('welcome')).payload.players;
+ assert.deepEqual(roster.find(p=>p.characterId==='zephyr').state.blessing.targets,['cc-rufus','cc-kentaro']);
+ zephyr.send({type:'state',state:{...caster,stateRevision:2,concentration:false,blessing}});
+ assert.equal((await restored.wait('state')).state.blessing,undefined);
+});

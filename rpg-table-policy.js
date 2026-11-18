@@ -6,6 +6,16 @@ const pick=(value,keys)=>Object.fromEntries(keys.filter(k=>value?.[k]!==undefine
 export function tacticalState(value){
  const s=pick(value,['characterId','characterName','portrait','stateEpoch','stateRevision','hp','ac','statuses','concentration','updatedAt']);
  s.concentration=!!value.concentration;s.hp=pick(value.hp,['current','max','temp']);// Les trois disponibilités viennent exclusivement de l'état du Companion.
+ // The caster publishes the declaration with its own tactical state.
+ const blessing=value.blessing;
+ if(value.characterId==='zephyr'&&s.concentration&&blessing&&
+  typeof blessing.id==='string'&&/^[\w-]{1,64}$/.test(blessing.id)&&
+  typeof blessing.room==='string'&&/^[\w-]{6,32}$/.test(blessing.room)&&
+  Number.isInteger(blessing.remaining)&&blessing.remaining>=1&&blessing.remaining<=10&&
+  Array.isArray(blessing.targets)&&blessing.targets.length>=1&&blessing.targets.length<=5&&
+  blessing.targets.every(target=>typeof target==='string'&&target.length>0&&target.length<=120)){
+  s.blessing={id:blessing.id,room:blessing.room,remaining:blessing.remaining,targets:[...new Set(blessing.targets)]};
+ }
  s.turn=pick(value.turn,['action','bonus','reaction']);return s;
 }
 export function tacticalRow(a){
