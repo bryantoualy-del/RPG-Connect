@@ -16,11 +16,20 @@ export function tacticalState(value){
   blessing.targets.every(target=>typeof target==='string'&&target.length>0&&target.length<=120)){
   s.blessing={id:blessing.id,room:blessing.room,remaining:blessing.remaining,targets:[...new Set(blessing.targets)]};
  }
+ if(value.characterId==='kobe'&&Array.isArray(value.inspirations)){
+  s.inspirations=value.inspirations.slice(-20).filter(e=>e&&typeof e.id==='string'&&/^[\w-]{1,64}$/.test(e.id)&&
+   ['rufus','kentaro'].includes(e.target)&&typeof e.room==='string'&&/^[\w-]{6,32}$/.test(e.room)&&
+   Number.isSafeInteger(e.expiresAt)&&e.expiresAt>Date.now()&&e.expiresAt<=Date.now()+610000)
+   .map(e=>pick(e,['id','room','target','expiresAt']));
+ }
+ if(['rufus','kentaro'].includes(value.characterId)&&typeof value.usedInspiration==='string'&&/^[\w-]{1,64}$/.test(value.usedInspiration)){
+  s.usedInspiration=value.usedInspiration;
+ }
  s.turn=pick(value.turn,['action','bonus','reaction']);return s;
 }
 export function tacticalRow(a){
  const enemy=a.kind==='enemy',row=pick(a,['id','name','portrait','role','kind','ownerId','companionId','initiative','activeTurn','conditions']);
- if(!enemy)return {...row,...pick(a,['health','ac','action','bonus','reaction','concentration','lifeStatus'])};
+ if(!enemy)return {...row,...pick(a,['health','ac','action','bonus','reaction','concentration','lifeStatus','usedInspiration'])};
  // Hostile disclosure is opt-in, including on the wire (not merely hidden by CSS).
  if(a.publicHealth===true&&a.health)row.health=pick(a.health,['current','max','temp']);
  if(a.publicAc===true)row.ac=a.ac;

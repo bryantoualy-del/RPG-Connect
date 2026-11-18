@@ -112,3 +112,16 @@ test('Table Libre retains only Zephyr’s active blessing declaration through GM
  zephyr.send({type:'state',state:{...caster,stateRevision:2,concentration:false,blessing}});
  assert.equal((await restored.wait('state')).state.blessing,undefined);
 });
+
+test('Table Libre transports an inspiration grant and its consumption without a roll result',()=>{
+ const expiresAt=Date.now()+60000;
+ const grant={id:'grant-1',target:'rufus',room:'TABLE2',expiresAt};
+ const hp={current:80,max:80,temp:0};
+ assert.deepEqual(tacticalState({characterId:'kobe',hp,inspirations:[{...grant,result:31}]}).inspirations,[grant]);
+ assert.deepEqual(tacticalState({characterId:'kobe',hp,inspirations:[{...grant,expiresAt:0}]}).inspirations,[]);
+ assert.equal(tacticalState({characterId:'samoth',hp,inspirations:[grant]}).inspirations,undefined);
+ const used=tacticalState({characterId:'rufus',hp,usedInspiration:grant.id,lastRoll:31});
+ assert.equal(used.usedInspiration,grant.id);
+ assert.equal(used.lastRoll,undefined);
+ assert.equal(tacticalPayload({conditionActors:[{kind:'player',usedInspiration:grant.id}]}).conditionActors[0].usedInspiration,grant.id);
+});
